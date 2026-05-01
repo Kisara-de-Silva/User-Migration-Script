@@ -1,0 +1,8 @@
+logs/
+migration_tracker.csv
+source/
+destination/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
