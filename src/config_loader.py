@@ -41,3 +41,23 @@ class ConfigLoader:
             "batch_prefix": self.config["BATCH"]["BATCH_PREFIX"],
             "batch_extension": self.config["BATCH"]["BATCH_EXTENSION"],
         }
+        
+    def get_validation_config(self):
+        mandatory_fields = self.config["VALIDATION"]["MANDATORY_FIELDS"]
+        true_values = self.config["VALIDATION"]["TRUE_VALUES"]
+        false_values = self.config["VALIDATION"]["FALSE_VALUES"]
+
+        return {
+            "mandatory_fields": [
+                field.strip() for field in mandatory_fields.split(",")
+                if field.strip()
+            ],
+            "true_values": [
+                value.strip().lower() for value in true_values.split(",")
+                if value.strip()
+            ],
+            "false_values": [
+                value.strip().lower() for value in false_values.split(",")
+                if value.strip()
+            ],
+        }
