@@ -61,3 +61,10 @@ class ConfigLoader:
                 if value.strip()
             ],
         }
+    
+    def get_execution_config(self):
+        mock_mode = self.config.getboolean("EXECUTION", "MOCK_MODE", fallback=True)
+
+        return {
+            "mock_mode": mock_mode
+        }

@@ -3,6 +3,11 @@ import os
 
 
 class CSVLoader:
+    SYSTEM_COLUMNS = {
+        "errorcode",
+        "errordescription"
+    }
+
     def __init__(self, file_path):
         self.file_path = file_path
 
@@ -18,6 +23,7 @@ class CSVLoader:
             raise FileNotFoundError(f"CSV file not found: {self.file_path}")
 
         users = []
+        ignored_columns = []
 
         with open(self.file_path, mode="r", newline="", encoding="utf-8-sig") as file:
             sample_text = file.read(4096)
@@ -33,10 +39,20 @@ class CSVLoader:
             original_headers = reader.fieldnames
             cleaned_headers = [header.strip() for header in original_headers]
 
+            accepted_header_pairs = []
+
+            for original_header, cleaned_header in zip(original_headers, cleaned_headers):
+                if cleaned_header.lower() in self.SYSTEM_COLUMNS:
+                    ignored_columns.append(cleaned_header)
+                else:
+                    accepted_header_pairs.append((original_header, cleaned_header))
+
+            final_headers = [cleaned_header for _, cleaned_header in accepted_header_pairs]
+
             for row_number, row in enumerate(reader, start=2):
                 cleaned_row = {}
 
-                for original_header, cleaned_header in zip(original_headers, cleaned_headers):
+                for original_header, cleaned_header in accepted_header_pairs:
                     value = row.get(original_header, "")
 
                     if value is None:
@@ -48,8 +64,9 @@ class CSVLoader:
                 users.append(cleaned_row)
 
         return {
-            "headers": cleaned_headers,
+            "headers": final_headers,
             "users": users,
             "total_users": len(users),
-            "delimiter": delimiter
+            "delimiter": delimiter,
+            "ignored_columns": ignored_columns
         }

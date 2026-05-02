@@ -1,8 +1,14 @@
+from datetime import datetime
 from src.config_loader import ConfigLoader
 from src.batch_detector import BatchDetector
 from src.tracker import MigrationTracker
 from src.csv_loader import CSVLoader
 from src.validator import UserValidator
+from src.processor import UserProcessor
+from src.user_creator import UserCreator
+from src.migration_engine import MigrationEngine
+from src.file_writer import FileWriter
+from src.logger_setup import setup_batch_logger
 
 
 def main():
@@ -13,12 +19,14 @@ def main():
     target = config_loader.get_target_config()
     batch_config = config_loader.get_batch_config()
     validation_config = config_loader.get_validation_config()
+    execution_config = config_loader.get_execution_config()
 
     print("Configuration loaded successfully.")
     print("Paths:", paths)
     print("Target:", target)
     print("Batch Config:", batch_config)
     print("Validation Config:", validation_config)
+    print("Execution Config:", execution_config)
 
     batch_detector = BatchDetector(
         source_dir=paths["source_dir"],
@@ -57,6 +65,20 @@ def main():
             f"Path: {batch['file_path']}"
         )
 
+        started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        batch_logger = setup_batch_logger(
+            log_dir=paths["log_dir"],
+            batch_file_name=batch_file_name
+        )
+
+        batch_logger.info("=" * 80)
+        batch_logger.info(f"Batch processing started | Batch={batch_file_name}")
+        batch_logger.info(f"Sequence Number={batch['sequence_number']}")
+        batch_logger.info(f"Source File={batch['file_path']}")
+        batch_logger.info(f"Target Create URL={target['create_user_url']}")
+        batch_logger.info(f"Mock Mode={execution_config['mock_mode']}")
+
         print(f"\nLoading CSV data into memory for batch: {batch_file_name}")
 
         csv_loader = CSVLoader(batch["file_path"])
@@ -66,11 +88,15 @@ def main():
         users = csv_data["users"]
         total_users = csv_data["total_users"]
         delimiter = csv_data["delimiter"]
+        ignored_columns = csv_data["ignored_columns"]
 
         print("CSV loaded successfully into memory.")
         print(f"Detected delimiter: {repr(delimiter)}")
         print(f"Headers found: {len(headers)}")
         print(f"Total users loaded: {total_users}")
+
+        if ignored_columns:
+            print(f"Ignored system columns: {ignored_columns}")
 
         if total_users > 0:
             first_user = users[0]
@@ -81,6 +107,14 @@ def main():
                 f"isCorpUser={first_user.get('isCorpUser', 'N/A')} | "
                 f"CIF={first_user.get('cifnumber', 'N/A')}"
             )
+
+        batch_logger.info(
+            f"CSV loaded into memory | "
+            f"Delimiter={repr(delimiter)} | "
+            f"Headers={len(headers)} | "
+            f"Total Users={total_users}"
+            f"Ignored System Columns={ignored_columns}"
+        )
 
         print(f"\nValidating users for batch: {batch_file_name}")
 
@@ -109,6 +143,170 @@ def main():
                     f"ErrorCode={invalid_user.get('ErrorCode')} | "
                     f"ErrorDescription={invalid_user.get('ErrorDescription')}"
                 )
+
+        batch_logger.info(
+            f"Validation completed | "
+            f"Valid Users={validation_result['total_valid']} | "
+            f"Invalid Users={validation_result['total_invalid']}"
+        )
+
+        print(f"\nSegregating valid users for batch: {batch_file_name}")
+
+        processor = UserProcessor()
+
+        segregation_result = processor.segregate_users(valid_users)
+
+        retail_users = segregation_result["retail_users"]
+        corporate_users = segregation_result["corporate_users"]
+
+        print("User segregation completed.")
+        print(f"Retail users: {segregation_result['total_retail_users']}")
+        print(f"Corporate users: {segregation_result['total_corporate_users']}")
+
+        corporate_cif_groups = processor.group_corporate_users_by_cif(corporate_users)
+
+        print("\nCorporate CIF Groups:")
+
+        if not corporate_cif_groups:
+            print("No corporate CIF groups found.")
+        else:
+            for cifnumber, users_in_cif in corporate_cif_groups.items():
+                print(
+                    f"CIF={cifnumber} | "
+                    f"Users in group: {len(users_in_cif)}"
+                )
+
+        batch_logger.info(
+            f"User segregation completed | "
+            f"Retail Users={segregation_result['total_retail_users']} | "
+            f"Corporate Users={segregation_result['total_corporate_users']}"
+        )
+
+        print(f"\nStarting mock user creation for batch: {batch_file_name}")
+
+        user_creator = UserCreator(
+            create_user_url=target["create_user_url"],
+            delete_user_url=target["delete_user_url"],
+            mock_mode=execution_config["mock_mode"]
+        )
+
+        migration_engine = MigrationEngine(
+            user_creator=user_creator,
+            logger=batch_logger
+        )
+
+        retail_result = migration_engine.process_retail_users(retail_users)
+        corporate_result = migration_engine.process_corporate_cif_groups(corporate_cif_groups)
+
+        successful_users = (
+            retail_result["successful_users"]
+            + corporate_result["successful_users"]
+        )
+
+        failed_users = (
+            invalid_users
+            + retail_result["failed_users"]
+            + corporate_result["failed_users"]
+        )
+
+        print("Mock user creation completed.")
+        print(f"Successful users: {len(successful_users)}")
+        print(f"Failed users: {len(failed_users)}")
+        print(f"Rollback users: {corporate_result['rollback_count']}")
+
+        if successful_users:
+            print("\nSuccessful User Details:")
+            for success_user in successful_users:
+                print(
+                    f"LoginID={success_user.get('loginid')} | "
+                    f"UUID={success_user.get('uuid')} | "
+                    f"Status={success_user.get('_creation_status')}"
+                )
+
+        if failed_users:
+            print("\nFailed User Details:")
+            for failed_user in failed_users:
+                print(
+                    f"Row={failed_user.get('_row_number')} | "
+                    f"LoginID={failed_user.get('loginid', 'N/A')} | "
+                    f"ErrorCode={failed_user.get('ErrorCode')} | "
+                    f"ErrorDescription={failed_user.get('ErrorDescription')}"
+                )
+
+        print(f"\nGenerating output files for batch: {batch_file_name}")
+
+        file_writer = FileWriter(
+            destination_dir=paths["destination_dir"]
+        )
+
+        success_file_result = file_writer.write_success_file(
+            batch_file_name=batch_file_name,
+            original_headers=headers,
+            successful_users=successful_users
+        )
+
+        error_file_result = file_writer.write_error_file(
+            batch_file_name=batch_file_name,
+            original_headers=headers,
+            failed_users=failed_users
+        )
+
+        if success_file_result["created"]:
+            print(
+                f"Success file created: {success_file_result['file_path']} | "
+                f"Records: {success_file_result['record_count']}"
+            )
+        else:
+            print("Success file not created because there are no successful users.")
+
+        if error_file_result["created"]:
+            print(
+                f"Error file created: {error_file_result['file_path']} | "
+                f"Records: {error_file_result['record_count']}"
+            )
+        else:
+            print("Error file not created because there are no failed users.")
+
+        completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        batch_logger.info(
+            f"Output file generation completed | "
+            f"Success File Created={success_file_result['created']} | "
+            f"Success Records={success_file_result['record_count']} | "
+            f"Error File Created={error_file_result['created']} | "
+            f"Error Records={error_file_result['record_count']}"
+        )
+
+        tracker.record_batch_result(
+            batch_file_name=batch_file_name,
+            sequence_number=batch["sequence_number"],
+            total_users_migrated=len(successful_users),
+            total_users_failed=len(failed_users),
+            started_at=started_at,
+            completed_at=completed_at
+        )
+
+        print(f"\nTracker updated for batch: {batch_file_name}")
+
+        batch_logger.info(
+            f"Tracker updated | "
+            f"Batch={batch_file_name} | "
+            f"Sequence={batch['sequence_number']} | "
+            f"Executed=true | "
+            f"Total Migrated={len(successful_users)} | "
+            f"Total Failed={len(failed_users)}"
+        )
+
+        batch_logger.info(
+            f"Batch processing completed | "
+            f"Started At={started_at} | "
+            f"Completed At={completed_at} | "
+            f"Successful Users={len(successful_users)} | "
+            f"Failed Users={len(failed_users)} | "
+            f"Rollback Users={corporate_result['rollback_count']}"
+        )
+
+        batch_logger.info("=" * 80)
 
 
 if __name__ == "__main__":
