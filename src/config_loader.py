@@ -43,11 +43,16 @@ class ConfigLoader:
         }
         
     def get_validation_config(self):
+        expected_headers = self.config["VALIDATION"].get("EXPECTED_HEADERS", "")
         mandatory_fields = self.config["VALIDATION"]["MANDATORY_FIELDS"]
         true_values = self.config["VALIDATION"]["TRUE_VALUES"]
         false_values = self.config["VALIDATION"]["FALSE_VALUES"]
 
         return {
+            "expected_headers": [
+                header.strip() for header in expected_headers.split(",") 
+                if header.strip()
+            ],
             "mandatory_fields": [
                 field.strip() for field in mandatory_fields.split(",")
                 if field.strip()

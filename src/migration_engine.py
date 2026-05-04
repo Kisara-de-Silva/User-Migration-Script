@@ -8,7 +8,10 @@ class MigrationEngine:
         "newpassword",
         "oldpassword",
         "secret",
-        "token"
+        "token",
+        "nationalidcardorpassport",
+        "telno",
+        "emailid"
     }
 
     def __init__(self, user_creator, logger=None):

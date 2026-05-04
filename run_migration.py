@@ -112,7 +112,7 @@ def main():
             f"CSV loaded into memory | "
             f"Delimiter={repr(delimiter)} | "
             f"Headers={len(headers)} | "
-            f"Total Users={total_users}"
+            f"Total Users={total_users} |"
             f"Ignored System Columns={ignored_columns}"
         )
 
@@ -121,8 +121,31 @@ def main():
         validator = UserValidator(
             mandatory_fields=validation_config["mandatory_fields"],
             true_values=validation_config["true_values"],
-            false_values=validation_config["false_values"]
+            false_values=validation_config["false_values"], 
+            expected_headers=validation_config["expected_headers"]
         )
+
+        header_validation_result = validator.validate_headers(headers)
+
+        if not header_validation_result["is_valid"]:
+            print("Header validation failed.")
+            print(f"Missing headers: {header_validation_result['missing_headers']}")
+
+            batch_logger.error(
+                f"Header validation failed | "
+                f"Missing Headers={header_validation_result['missing_headers']} | "
+                f"Unexpected Headers={header_validation_result['unexpected_headers']}"
+            )
+
+            continue
+
+        if header_validation_result["unexpected_headers"]:
+            print(f"Unexpected headers found: {header_validation_result['unexpected_headers']}")
+
+            batch_logger.warning(
+                f"Unexpected headers found | "
+                f"Unexpected Headers={header_validation_result['unexpected_headers']}"
+            )
 
         validation_result = validator.validate_users(users)
 
@@ -132,6 +155,10 @@ def main():
         print("Validation completed.")
         print(f"Valid users: {validation_result['total_valid']}")
         print(f"Invalid users: {validation_result['total_invalid']}")
+        print(f"CIF validation rejected users: {validation_result['cif_rejected_users']}")
+
+        if validation_result["failed_cifs"]:
+            print(f"Failed CIFs due to validation: {validation_result['failed_cifs']}")
 
         if invalid_users:
             print("\nInvalid User Details:")
@@ -147,7 +174,9 @@ def main():
         batch_logger.info(
             f"Validation completed | "
             f"Valid Users={validation_result['total_valid']} | "
-            f"Invalid Users={validation_result['total_invalid']}"
+            f"Invalid Users={validation_result['total_invalid']} | "
+            f"CIF Rejected Users={validation_result['cif_rejected_users']} | "
+            f"Failed CIFs={validation_result['failed_cifs']}"
         )
 
         print(f"\nSegregating valid users for batch: {batch_file_name}")
