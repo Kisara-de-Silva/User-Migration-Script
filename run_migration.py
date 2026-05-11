@@ -20,6 +20,10 @@ def main():
     batch_config = config_loader.get_batch_config()
     validation_config = config_loader.get_validation_config()
     execution_config = config_loader.get_execution_config()
+    output_config = config_loader.get_output_config()
+    scim_payload_config = config_loader.get_scim_payload_config()
+    auth_config = config_loader.get_auth_config()
+    http_config = config_loader.get_http_config()
 
     print("Configuration loaded successfully.")
     print("Paths:", paths)
@@ -27,6 +31,19 @@ def main():
     print("Batch Config:", batch_config)
     print("Validation Config:", validation_config)
     print("Execution Config:", execution_config)
+    print("Output Config:", output_config)
+    print("SCIM Payload Config:", {
+        "native_password": "***MASKED***",
+        "preferred_language": scim_payload_config["preferred_language"],
+        "created_by": scim_payload_config["created_by"],
+        "mfa_config": "configured"
+    })
+    print("Auth Config:", {
+        "auth_type": auth_config["auth_type"],
+        "username": auth_config["username"],
+        "password": "***MASKED***"
+    })
+    print("HTTP Config:", http_config)
 
     batch_detector = BatchDetector(
         source_dir=paths["source_dir"],
@@ -211,12 +228,20 @@ def main():
             f"Corporate Users={segregation_result['total_corporate_users']}"
         )
 
-        print(f"\nStarting mock user creation for batch: {batch_file_name}")
+        if execution_config["mock_mode"]:
+            print(f"\nStarting mock user creation for batch: {batch_file_name}")
+        else:
+            print(f"\nStarting real SCIM user creation for batch: {batch_file_name}")
 
         user_creator = UserCreator(
             create_user_url=target["create_user_url"],
             delete_user_url=target["delete_user_url"],
-            mock_mode=execution_config["mock_mode"]
+            mock_mode=execution_config["mock_mode"],
+            true_values=validation_config["true_values"],
+            false_values=validation_config["false_values"],
+            scim_payload_config=scim_payload_config,
+            auth_config=auth_config,
+            http_config=http_config
         )
 
         migration_engine = MigrationEngine(
@@ -238,7 +263,11 @@ def main():
             + corporate_result["failed_users"]
         )
 
-        print("Mock user creation completed.")
+        if execution_config["mock_mode"]:
+            print("Mock user creation completed.")
+        else:
+            print("Real SCIM user creation completed.")
+            
         print(f"Successful users: {len(successful_users)}")
         print(f"Failed users: {len(failed_users)}")
         print(f"Rollback users: {corporate_result['rollback_count']}")
@@ -265,18 +294,17 @@ def main():
         print(f"\nGenerating output files for batch: {batch_file_name}")
 
         file_writer = FileWriter(
-            destination_dir=paths["destination_dir"]
+            destination_dir=paths["destination_dir"],
+            output_fields=output_config["output_fields"]
         )
 
         success_file_result = file_writer.write_success_file(
             batch_file_name=batch_file_name,
-            original_headers=headers,
             successful_users=successful_users
         )
 
         error_file_result = file_writer.write_error_file(
             batch_file_name=batch_file_name,
-            original_headers=headers,
             failed_users=failed_users
         )
 

@@ -60,6 +60,15 @@ class CSVLoader:
 
                     cleaned_row[cleaned_header] = value.strip()
 
+                # Skip fully empty rows
+                has_any_value = any(
+                    str(value).strip()
+                    for key, value in cleaned_row.items()
+                )
+
+                if not has_any_value:
+                    continue
+
                 cleaned_row["_row_number"] = row_number
                 users.append(cleaned_row)
 

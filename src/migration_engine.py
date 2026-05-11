@@ -5,13 +5,12 @@ class MigrationEngine:
     SENSITIVE_FIELDS = {
         "password",
         "digestedpassword",
-        "newpassword",
-        "oldpassword",
-        "secret",
-        "token",
         "nationalidcardorpassport",
+        "identificationnumber",
         "telno",
-        "emailid"
+        "emailid",
+        "token",
+        "secret"
     }
 
     def __init__(self, user_creator, logger=None):
@@ -19,15 +18,45 @@ class MigrationEngine:
         self.logger = logger
 
     def sanitize_payload(self, payload):
-        sanitized_payload = {}
+        if isinstance(payload, dict):
+            sanitized_payload = {}
 
-        for key, value in payload.items():
-            if key.lower() in self.SENSITIVE_FIELDS:
-                sanitized_payload[key] = "***MASKED***"
-            else:
-                sanitized_payload[key] = value
+            for key, value in payload.items():
+                key_lower = key.lower()
 
-        return sanitized_payload
+                if key_lower in self.SENSITIVE_FIELDS:
+                    sanitized_payload[key] = "***MASKED***"
+                elif key in {"emails", "phoneNumbers"} and isinstance(value, list):
+                    sanitized_payload[key] = self.sanitize_contact_list(value)
+                else:
+                    sanitized_payload[key] = self.sanitize_payload(value)
+
+            return sanitized_payload
+
+        if isinstance(payload, list):
+            return [self.sanitize_payload(item) for item in payload]
+
+        return payload
+
+    def sanitize_contact_list(self, contact_list):
+        sanitized_list = []
+
+        for item in contact_list:
+            if not isinstance(item, dict):
+                sanitized_list.append(item)
+                continue
+
+            sanitized_item = {}
+
+            for key, value in item.items():
+                if key == "value":
+                    sanitized_item[key] = "***MASKED***"
+                else:
+                    sanitized_item[key] = self.sanitize_payload(value)
+
+            sanitized_list.append(sanitized_item)
+
+        return sanitized_list
 
     def log_transaction(self, loginid, payload, system_response_code, status, description):
         if not self.logger:
@@ -49,6 +78,8 @@ class MigrationEngine:
         for user in retail_users:
             result = self.user_creator.create_user(user)
 
+            api_payload = result.get("api_payload", result.get("payload", {}))
+
             if result["success"]:
                 success_user = result["payload"].copy()
                 success_user["_creation_status"] = "SUCCESS"
@@ -57,7 +88,7 @@ class MigrationEngine:
 
                 self.log_transaction(
                     loginid=result["loginid"],
-                    payload=result["payload"],
+                    payload=api_payload,
                     system_response_code=result["system_response_code"],
                     status="SUCCESS",
                     description="Retail user successfully generated."
@@ -71,7 +102,7 @@ class MigrationEngine:
 
                 self.log_transaction(
                     loginid=result["loginid"],
-                    payload=result["payload"],
+                    payload=api_payload,
                     system_response_code=result["system_response_code"],
                     status="FAILED",
                     description=result["error_description"]
@@ -89,7 +120,10 @@ class MigrationEngine:
 
         for cifnumber, users_in_cif in corporate_cif_groups.items():
             if self.logger:
-                self.logger.info(f"Starting corporate CIF group processing | CIF={cifnumber} | Users={len(users_in_cif)}")
+                self.logger.info(
+                    f"Starting corporate CIF group processing | "
+                    f"CIF={cifnumber} | Users={len(users_in_cif)}"
+                )
 
             created_users_in_group = []
             group_failed = False
@@ -97,13 +131,14 @@ class MigrationEngine:
 
             for user in users_in_cif:
                 result = self.user_creator.create_user(user)
+                api_payload = result.get("api_payload", result.get("payload", {}))
 
                 if result["success"]:
                     created_users_in_group.append(result)
 
                     self.log_transaction(
                         loginid=result["loginid"],
-                        payload=result["payload"],
+                        payload=api_payload,
                         system_response_code=result["system_response_code"],
                         status="SUCCESS",
                         description=f"Corporate user successfully generated under CIF {cifnumber}."
@@ -115,7 +150,7 @@ class MigrationEngine:
 
                     self.log_transaction(
                         loginid=result["loginid"],
-                        payload=result["payload"],
+                        payload=api_payload,
                         system_response_code=result["system_response_code"],
                         status="FAILED",
                         description=result["error_description"]
@@ -134,12 +169,23 @@ class MigrationEngine:
 
                 for created_result in created_users_in_group:
                     rollback_loginid = created_result.get("loginid")
-                    rollback_result = self.user_creator.delete_user(rollback_loginid)
+                    rollback_uuid = created_result.get("uuid") or created_result.get("payload", {}).get("uuid")
+
+                    rollback_result = self.user_creator.delete_user(
+                        loginid=rollback_loginid,
+                        user_uuid=rollback_uuid
+                    )
+
                     rollback_count += 1
+
+                    rollback_payload = created_result.get(
+                        "api_payload",
+                        created_result.get("payload", {})
+                    )
 
                     self.log_transaction(
                         loginid=rollback_loginid,
-                        payload=created_result["payload"],
+                        payload=rollback_payload,
                         system_response_code=rollback_result["system_response_code"],
                         status="ROLLBACK",
                         description=f"User creation reversed due to CIF group failure. CIF={cifnumber}."

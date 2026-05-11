@@ -25,9 +25,12 @@ class ConfigLoader:
     def get_target_config(self):
         protocol = self.config["TARGET"]["TARGET_PROTOCOL"]
         host = self.config["TARGET"]["TARGET_HOST"]
-        port = self.config["TARGET"]["TARGET_PORT"]
+        port = self.config["TARGET"].get("TARGET_PORT", "").strip()
 
-        base_url = f"{protocol}://{host}:{port}"
+        if port:
+            base_url = f"{protocol}://{host}:{port}"
+        else:
+            base_url = f"{protocol}://{host}"
 
         return {
             "target_host": host,
@@ -73,3 +76,46 @@ class ConfigLoader:
         return {
             "mock_mode": mock_mode
         }
+    
+    def get_output_config(self):
+        output_fields = self.config["OUTPUT"]["OUTPUT_FIELDS"]
+
+        return {
+            "output_fields": [
+                field.strip() for field in output_fields.split(",")
+                if field.strip()
+            ]
+        }
+    
+    def get_scim_payload_config(self):
+        return {
+            "native_password": self.config["SCIM_PAYLOAD"].get("NATIVE_PASSWORD", "admin"),
+            "preferred_language": self.config["SCIM_PAYLOAD"].get("PREFERRED_LANGUAGE", "SG"),
+            "created_by": self.config["SCIM_PAYLOAD"].get("CREATED_BY", "migrationScript"),
+            "mfa_config": self.config["SCIM_PAYLOAD"].get(
+                "MFA_CONFIG",
+                "{\"SMS\": true, \"EMAIL\": true, \"SOFT_TOKEN\": false, \"FIDO\": false}"
+            )
+        }
+    
+    def get_auth_config(self):
+        return {
+            "auth_type": self.config["AUTH"].get("AUTH_TYPE", "BASIC"),
+            "username": self.config["AUTH"].get("USERNAME", ""),
+            "password": self.config["AUTH"].get("PASSWORD", "")
+        }
+
+    def get_http_config(self):
+        return {
+            "request_timeout_seconds": self.config.getint(
+                "HTTP",
+                "REQUEST_TIMEOUT_SECONDS",
+                fallback=30
+            ),
+            "verify_ssl": self.config.getboolean(
+                "HTTP",
+                "VERIFY_SSL",
+                fallback=True
+            )
+        }
+    

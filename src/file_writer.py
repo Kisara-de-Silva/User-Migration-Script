@@ -3,8 +3,9 @@ import os
 
 
 class FileWriter:
-    def __init__(self, destination_dir):
+    def __init__(self, destination_dir, output_fields):
         self.destination_dir = destination_dir
+        self.output_fields = output_fields
 
     def ensure_destination_exists(self):
         if not os.path.exists(self.destination_dir):
@@ -22,7 +23,7 @@ class FileWriter:
 
         return cleaned_user
 
-    def write_success_file(self, batch_file_name, original_headers, successful_users):
+    def write_success_file(self, batch_file_name, successful_users):
         self.ensure_destination_exists()
 
         batch_base_name = self.get_batch_base_name(batch_file_name)
@@ -36,10 +37,7 @@ class FileWriter:
                 "record_count": 0
             }
 
-        output_headers = list(original_headers)
-
-        if "uuid" not in output_headers:
-            output_headers.append("uuid")
+        output_headers = list(self.output_fields)
 
         cleaned_users = []
 
@@ -63,7 +61,7 @@ class FileWriter:
             "record_count": len(cleaned_users)
         }
 
-    def write_error_file(self, batch_file_name, original_headers, failed_users):
+    def write_error_file(self, batch_file_name, failed_users):
         self.ensure_destination_exists()
 
         batch_base_name = self.get_batch_base_name(batch_file_name)
@@ -77,7 +75,7 @@ class FileWriter:
                 "record_count": 0
             }
 
-        output_headers = list(original_headers)
+        output_headers = list(self.output_fields)
 
         if "ErrorCode" not in output_headers:
             output_headers.append("ErrorCode")
