@@ -1,6 +1,3 @@
-from collections import defaultdict
-
-
 class UserProcessor:
     def segregate_users(self, valid_users):
         retail_users = []
@@ -20,12 +17,3 @@ class UserProcessor:
             "total_retail_users": len(retail_users),
             "total_corporate_users": len(corporate_users)
         }
-
-    def group_corporate_users_by_cif(self, corporate_users):
-        cif_groups = defaultdict(list)
-
-        for user in corporate_users:
-            cifnumber = user.get("cifnumber", "").strip()
-            cif_groups[cifnumber].append(user)
-
-        return dict(cif_groups)

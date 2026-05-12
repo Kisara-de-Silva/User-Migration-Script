@@ -112,6 +112,48 @@ class MigrationEngine:
             "successful_users": successful_users,
             "failed_users": failed_users
         }
+    
+    def process_users_individually(self, users):
+        successful_users = []
+        failed_users = []
+
+        for user in users:
+            result = self.user_creator.create_user(user)
+            api_payload = result.get("api_payload", result.get("payload", {}))
+
+            if result["success"]:
+                success_user = result["payload"].copy()
+                success_user["_creation_status"] = "SUCCESS"
+                success_user["_system_response_code"] = result["system_response_code"]
+                successful_users.append(success_user)
+
+                self.log_transaction(
+                    loginid=result["loginid"],
+                    payload=api_payload,
+                    system_response_code=result["system_response_code"],
+                    status="SUCCESS",
+                    description="User successfully generated."
+                )
+
+            else:
+                failed_user = user.copy()
+                failed_user["ErrorCode"] = result["error_code"]
+                failed_user["ErrorDescription"] = result["error_description"]
+                failed_users.append(failed_user)
+
+                self.log_transaction(
+                    loginid=result["loginid"],
+                    payload=api_payload,
+                    system_response_code=result["system_response_code"],
+                    status="FAILED",
+                    description=result["error_description"]
+                )
+
+        return {
+            "successful_users": successful_users,
+            "failed_users": failed_users,
+            "rollback_count": 0
+        }
 
     def process_corporate_cif_groups(self, corporate_cif_groups):
         successful_users = []

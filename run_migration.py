@@ -122,7 +122,7 @@ def main():
                 f"Row={first_user.get('_row_number')} | "
                 f"LoginID={first_user.get('loginid', 'N/A')} | "
                 f"isCorpUser={first_user.get('isCorpUser', 'N/A')} | "
-                f"CIF={first_user.get('cifnumber', 'N/A')}"
+                f"CorporateID={first_user.get('corporateid', 'N/A')}"
             )
 
         batch_logger.info(
@@ -172,10 +172,6 @@ def main():
         print("Validation completed.")
         print(f"Valid users: {validation_result['total_valid']}")
         print(f"Invalid users: {validation_result['total_invalid']}")
-        print(f"CIF validation rejected users: {validation_result['cif_rejected_users']}")
-
-        if validation_result["failed_cifs"]:
-            print(f"Failed CIFs due to validation: {validation_result['failed_cifs']}")
 
         if invalid_users:
             print("\nInvalid User Details:")
@@ -191,9 +187,7 @@ def main():
         batch_logger.info(
             f"Validation completed | "
             f"Valid Users={validation_result['total_valid']} | "
-            f"Invalid Users={validation_result['total_invalid']} | "
-            f"CIF Rejected Users={validation_result['cif_rejected_users']} | "
-            f"Failed CIFs={validation_result['failed_cifs']}"
+            f"Invalid Users={validation_result['total_invalid']}"
         )
 
         print(f"\nSegregating valid users for batch: {batch_file_name}")
@@ -209,18 +203,8 @@ def main():
         print(f"Retail users: {segregation_result['total_retail_users']}")
         print(f"Corporate users: {segregation_result['total_corporate_users']}")
 
-        corporate_cif_groups = processor.group_corporate_users_by_cif(corporate_users)
-
-        print("\nCorporate CIF Groups:")
-
-        if not corporate_cif_groups:
-            print("No corporate CIF groups found.")
-        else:
-            for cifnumber, users_in_cif in corporate_cif_groups.items():
-                print(
-                    f"CIF={cifnumber} | "
-                    f"Users in group: {len(users_in_cif)}"
-                )
+        print("\nCIF/group-level processing is disabled.")
+        print("Users will be processed individually.")
 
         batch_logger.info(
             f"User segregation completed | "
@@ -249,18 +233,13 @@ def main():
             logger=batch_logger
         )
 
-        retail_result = migration_engine.process_retail_users(retail_users)
-        corporate_result = migration_engine.process_corporate_cif_groups(corporate_cif_groups)
+        migration_result = migration_engine.process_users_individually(valid_users)
 
-        successful_users = (
-            retail_result["successful_users"]
-            + corporate_result["successful_users"]
-        )
+        successful_users = migration_result["successful_users"]
 
         failed_users = (
             invalid_users
-            + retail_result["failed_users"]
-            + corporate_result["failed_users"]
+            + migration_result["failed_users"]
         )
 
         if execution_config["mock_mode"]:
@@ -270,7 +249,7 @@ def main():
             
         print(f"Successful users: {len(successful_users)}")
         print(f"Failed users: {len(failed_users)}")
-        print(f"Rollback users: {corporate_result['rollback_count']}")
+        print(f"Rollback users: {migration_result['rollback_count']}")
 
         if successful_users:
             print("\nSuccessful User Details:")
@@ -360,7 +339,7 @@ def main():
             f"Completed At={completed_at} | "
             f"Successful Users={len(successful_users)} | "
             f"Failed Users={len(failed_users)} | "
-            f"Rollback Users={corporate_result['rollback_count']}"
+            f"Rollback Users={migration_result['rollback_count']}"
         )
 
         batch_logger.info("=" * 80)

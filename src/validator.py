@@ -1,4 +1,21 @@
+from datetime import datetime
+
+
 class UserValidator:
+    DATE_FIELDS = {
+        "effectivefrom",
+        "modifiedon",
+        "checkedon",
+        "lastPasswordChangeOn",
+        "lockedTimestamp"
+    }
+
+    NUMERIC_FIELDS = {
+        "noOfLoginAttempts",
+        "noOfOTPAttempts",
+        "noOfOtpGenerates"
+    }
+
     def __init__(self, mandatory_fields, true_values, false_values, expected_headers=None):
         self.mandatory_fields = mandatory_fields
         self.true_values = true_values
@@ -38,8 +55,34 @@ class UserValidator:
 
         return None
 
+    def is_valid_mmddyyyy_date(self, value):
+        value = str(value).strip()
+
+        if not value:
+            return True
+
+        try:
+            datetime.strptime(value, "%m/%d/%Y")
+            return True
+        except ValueError:
+            return False
+
+    def is_valid_numeric(self, value):
+        value = str(value).strip()
+
+        if not value:
+            return True
+
+        return value.isdigit()
+
     def build_invalid_user(self, user, errors):
-        error_codes = " | ".join(error["code"] for error in errors)
+        unique_error_codes = []
+
+        for error in errors:
+            if error["code"] not in unique_error_codes:
+                unique_error_codes.append(error["code"])
+
+        error_codes = " | ".join(unique_error_codes)
         error_descriptions = " | ".join(error["description"] for error in errors)
 
         invalid_user = user.copy()
@@ -93,6 +136,24 @@ class UserValidator:
                     "description": "Invalid User Type: isCorpUser must be a valid boolean value"
                 })
 
+        for field in self.DATE_FIELDS:
+            value = user.get(field, "")
+
+            if value and not self.is_valid_mmddyyyy_date(value):
+                errors.append({
+                    "code": "ERR_001",
+                    "description": f"Invalid date format for {field}: expected MM/DD/YYYY"
+                })
+
+        for field in self.NUMERIC_FIELDS:
+            value = user.get(field, "")
+
+            if value and not self.is_valid_numeric(value):
+                errors.append({
+                    "code": "ERR_001",
+                    "description": f"Invalid numeric value for {field}"
+                })
+
         if errors:
             invalid_user = self.build_invalid_user(user, errors)
 
@@ -101,8 +162,7 @@ class UserValidator:
 
             return {
                 "is_valid": False,
-                "user": invalid_user,
-                "cifnumber": user.get("cifnumber", "").strip()
+                "user": invalid_user
             }
 
         valid_user = user.copy()
@@ -110,54 +170,24 @@ class UserValidator:
 
         return {
             "is_valid": True,
-            "user": valid_user,
-            "cifnumber": user.get("cifnumber", "").strip()
+            "user": valid_user
         }
 
     def validate_users(self, users):
-        initial_results = []
-        failed_cifs = {}
+        valid_users = []
+        invalid_users = []
 
         for user in users:
             result = self.validate_single_user(user)
-            initial_results.append(result)
 
-            cifnumber = result["cifnumber"]
-
-            if not result["is_valid"] and cifnumber:
-                failed_loginid = result["user"].get("loginid", "UNKNOWN")
-                failed_cifs[cifnumber] = failed_loginid
-
-        valid_users = []
-        invalid_users = []
-        cif_rejected_users = 0
-
-        for result in initial_results:
-            user = result["user"]
-            cifnumber = result["cifnumber"]
-
-            if result["is_valid"] and cifnumber in failed_cifs:
-                failed_user = user.copy()
-                failed_user["ErrorCode"] = "ERR_002"
-                failed_user["ErrorDescription"] = (
-                    f"CIF Group Failure Rollback. CIF {cifnumber} failed "
-                    f"because user {failed_cifs[cifnumber]} failed validation."
-                )
-
-                invalid_users.append(failed_user)
-                cif_rejected_users += 1
-
-            elif result["is_valid"]:
-                valid_users.append(user)
-
+            if result["is_valid"]:
+                valid_users.append(result["user"])
             else:
-                invalid_users.append(user)
+                invalid_users.append(result["user"])
 
         return {
             "valid_users": valid_users,
             "invalid_users": invalid_users,
             "total_valid": len(valid_users),
-            "total_invalid": len(invalid_users),
-            "failed_cifs": failed_cifs,
-            "cif_rejected_users": cif_rejected_users
+            "total_invalid": len(invalid_users)
         }

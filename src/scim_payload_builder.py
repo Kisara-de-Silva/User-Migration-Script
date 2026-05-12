@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 class SCIMPayloadBuilder:
     def __init__(
         self,
@@ -34,11 +37,42 @@ class SCIMPayloadBuilder:
 
         raise ValueError(f"Invalid boolean value for field: {field_name}")
 
+    def to_integer(self, user, field_name, default_value=0):
+        value = self.get_value(user, field_name)
+
+        if not value:
+            return default_value
+
+        return int(value)
+
+    def convert_mmddyyyy_to_isds_datetime(self, user, field_name):
+        value = self.get_value(user, field_name)
+
+        if not value:
+            return ""
+
+        # If already in ISDS format, keep it unchanged.
+        # Example: 20250918120832Z
+        if len(value) == 15 and value.endswith("Z") and value[:14].isdigit():
+            return value
+
+        parsed_date = datetime.strptime(value, "%m/%d/%Y")
+
+        # BU input gives only date, so we use 000000 for time.
+        return parsed_date.strftime("%Y%m%d000000Z")
+
     def build_payload(self, user):
         original_loginid = self.get_value(user, "loginid")
         uppercase_loginid = original_loginid.upper()
 
         user_uuid = self.get_value(user, "uuid")
+
+        effective_from_isds = self.convert_mmddyyyy_to_isds_datetime(user, "effectivefrom")
+        modified_on_isds = self.convert_mmddyyyy_to_isds_datetime(user, "modifiedon")
+        last_password_change_on_isds = self.convert_mmddyyyy_to_isds_datetime(
+            user,
+            "lastPasswordChangeOn"
+        )
 
         return {
             "password": self.native_password,
@@ -89,22 +123,23 @@ class SCIMPayloadBuilder:
                 }
             ],
             "CombankDetails": {
-                "cif": self.get_value(user, "cifnumber"),
+                "cif": self.get_value(user, "corporateid"),
                 "loginId": uppercase_loginid,
-                "activateDate": self.get_value(user, "effectivefrom"),
+                "activateDate": effective_from_isds,
                 "identificationType": self.get_value(user, "identificationtype"),
                 "lockedUser": self.get_value(user, "lockedUser"),
-                "createdOn": self.get_value(user, "effectivefrom"),
+                "createdOn": effective_from_isds,
                 "isApprovalRequired": self.to_boolean(user, "isApprovalRequired"),
                 "accountStatus": self.get_value(user, "accountStatus"),
                 "lockStatus": None,
-                "lastPasswordChangeOn": self.get_value(user, "lastPasswordChangeOn"),
-                "isMigrated": self.to_boolean(user, "ismigrated"),
+                "lastPasswordChangeOn": last_password_change_on_isds,
+                "isMigrated": True,
                 "unifiedUsername": original_loginid,
                 "migratedUsername": original_loginid,
                 "lockedTimestamp": None,
-                "noOfOTPAttempts": 0,
-                "noOfOtpGenerates": 0,
+                "noOfOTPAttempts": self.to_integer(user, "noOfOTPAttempts", 0),
+                "noOfOtpGenerates": self.to_integer(user, "noOfOtpGenerates", 0),
+                "noOfLoginAttempts": self.to_integer(user, "noOfLoginAttempts", 0),
                 "customStr03": None,
                 "customStr02": None,
                 "lockedReason": self.get_value(user, "lockedReason"),
@@ -113,7 +148,7 @@ class SCIMPayloadBuilder:
                 "isCorpUser": self.to_boolean(user, "isCorpUser"),
                 "customStr05": None,
                 "customStr04": None,
-                "updatedOn": self.get_value(user, "modifiedon"),
+                "updatedOn": modified_on_isds,
                 "digestedPassword": self.get_value(user, "digestedPassword"),
                 "createdBy": self.created_by,
                 "mfaConfig": self.mfa_config,
