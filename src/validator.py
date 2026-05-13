@@ -16,6 +16,21 @@ class UserValidator:
         "noOfOtpGenerates"
     }
 
+    ALLOWED_ACCOUNT_STATUSES = {
+        "ACT",
+        "ALK",
+        "DBLT",
+        "DBLP",
+        "LCK",
+        "UC"
+    }
+
+    BOOLEAN_FIELDS = {
+        "isCorpUser",
+        "isApprovalRequired",
+        "forcePasswordChange"
+    }
+
     def __init__(self, mandatory_fields, true_values, false_values, expected_headers=None):
         self.mandatory_fields = mandatory_fields
         self.true_values = true_values
@@ -41,7 +56,7 @@ class UserValidator:
             "unexpected_headers": unexpected_headers
         }
 
-    def normalize_is_corp_user(self, value):
+    def normalize_boolean(self, value):
         if value is None:
             return None
 
@@ -94,6 +109,7 @@ class UserValidator:
     def validate_single_user(self, user):
         errors = []
 
+        # ERR_001 - Missing mandatory fields
         for field in self.mandatory_fields:
             value = user.get(field, "")
 
@@ -106,6 +122,7 @@ class UserValidator:
                     "description": f"Missing mandatory field: {field}"
                 })
 
+        # ERR_001 - telno format
         telno = user.get("telno", "")
 
         if telno is not None and str(telno).strip():
@@ -115,6 +132,7 @@ class UserValidator:
                     "description": "Invalid value for telno: phone number must start with +"
                 })
 
+        # ERR_001 - email format
         emailid = user.get("emailid", "")
 
         if emailid is not None and str(emailid).strip():
@@ -124,27 +142,74 @@ class UserValidator:
                     "description": "Invalid value for emailid: email must contain @"
                 })
 
-        is_corp_user_raw = user.get("isCorpUser", "")
-        is_corp_user = None
+        # ERR_001 - locationid numeric check
+        locationid = user.get("locationid", "")
 
-        if is_corp_user_raw is not None and str(is_corp_user_raw).strip():
-            is_corp_user = self.normalize_is_corp_user(is_corp_user_raw)
-
-            if is_corp_user is None:
+        if locationid is not None and str(locationid).strip():
+            if not str(locationid).strip().isdigit():
                 errors.append({
-                    "code": "ERR_003",
-                    "description": "Invalid User Type: isCorpUser must be a valid boolean value"
+                    "code": "ERR_001",
+                    "description": "Invalid numeric value for locationid"
                 })
 
+        # ERR_001 - corporateid numeric check
+        # Important: we only validate it as digits. We do not convert it to int,
+        # so leading zeros are preserved.
+        corporateid = user.get("corporateid", "")
+
+        if corporateid is not None and str(corporateid).strip():
+            if not str(corporateid).strip().isdigit():
+                errors.append({
+                    "code": "ERR_001",
+                    "description": "Invalid numeric value for corporateid"
+                })
+
+        # ERR_007 - accountStatus allowed values
+        account_status = user.get("accountStatus", "")
+
+        if account_status is not None and str(account_status).strip():
+            cleaned_account_status = str(account_status).strip().upper()
+
+            if cleaned_account_status not in self.ALLOWED_ACCOUNT_STATUSES:
+                errors.append({
+                    "code": "ERR_007",
+                    "description": (
+                        "Invalid value for accountStatus: allowed values are "
+                        "ACT, ALK, DBLT, DBLP, LCK, UC"
+                    )
+                })
+
+        # ERR_003 - Boolean fields
+        normalized_boolean_values = {}
+
+        for field in self.BOOLEAN_FIELDS:
+            value = user.get(field, "")
+
+            if value is not None and str(value).strip():
+                normalized_value = self.normalize_boolean(value)
+
+                if normalized_value is None:
+                    errors.append({
+                        "code": "ERR_003",
+                        "description": (
+                            f"Invalid boolean value for {field}: "
+                            "allowed values are TRUE or FALSE"
+                        )
+                    })
+                else:
+                    normalized_boolean_values[field] = normalized_value
+
+        # ERR_006 - Date format validation
         for field in self.DATE_FIELDS:
             value = user.get(field, "")
 
             if value and not self.is_valid_mmddyyyy_date(value):
                 errors.append({
-                    "code": "ERR_001",
+                    "code": "ERR_006",
                     "description": f"Invalid date format for {field}: expected MM/DD/YYYY"
                 })
 
+        # ERR_001 - Numeric attempt fields
         for field in self.NUMERIC_FIELDS:
             value = user.get(field, "")
 
@@ -153,6 +218,8 @@ class UserValidator:
                     "code": "ERR_001",
                     "description": f"Invalid numeric value for {field}"
                 })
+
+        is_corp_user = normalized_boolean_values.get("isCorpUser")
 
         if errors:
             invalid_user = self.build_invalid_user(user, errors)

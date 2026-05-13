@@ -24,6 +24,7 @@ def main():
     scim_payload_config = config_loader.get_scim_payload_config()
     auth_config = config_loader.get_auth_config()
     http_config = config_loader.get_http_config()
+    duplicate_check_config = config_loader.get_duplicate_check_config()
 
     print("Configuration loaded successfully.")
     print("Paths:", paths)
@@ -44,6 +45,7 @@ def main():
         "password": "***MASKED***"
     })
     print("HTTP Config:", http_config)
+    print("Duplicate Check Config:", duplicate_check_config)
 
     batch_detector = BatchDetector(
         source_dir=paths["source_dir"],
@@ -225,7 +227,8 @@ def main():
             false_values=validation_config["false_values"],
             scim_payload_config=scim_payload_config,
             auth_config=auth_config,
-            http_config=http_config
+            http_config=http_config,
+            duplicate_check_config=duplicate_check_config
         )
 
         migration_engine = MigrationEngine(

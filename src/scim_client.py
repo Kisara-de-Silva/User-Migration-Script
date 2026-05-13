@@ -154,3 +154,79 @@ class SCIMClient:
                 "error_description": f"SCIM delete request failed: {str(exception)}",
                 "response_body": None
             }
+        
+    def check_duplicate_by_unified_username(
+        self,
+        loginid,
+        attribute_name="CombankDetails.unifiedUsername",
+        use_quotes=True
+    ):
+        if use_quotes:
+            filter_expression = f'{attribute_name} eq "{loginid}"'
+        else:
+            filter_expression = f"{attribute_name} eq {loginid}"
+
+        try:
+            response = requests.get(
+                self.create_user_url,
+                params={"filter": filter_expression},
+                headers=self.get_headers(),
+                auth=self.get_auth(),
+                timeout=self.timeout_seconds,
+                verify=self.verify_ssl
+            )
+
+            response_body = self.parse_response_body(response)
+
+            if 200 <= response.status_code < 300:
+                total_results = response_body.get("totalResults")
+
+                if total_results is not None:
+                    try:
+                        is_duplicate = int(total_results) > 0
+                    except (ValueError, TypeError):
+                        resources = response_body.get("Resources", [])
+                        is_duplicate = len(resources) > 0
+                else:
+                    resources = response_body.get("Resources", [])
+                    is_duplicate = len(resources) > 0
+
+                return {
+                    "check_success": True,
+                    "is_duplicate": is_duplicate,
+                    "status_code": response.status_code,
+                    "request_url": response.url,
+                    "response_body": response_body
+                }
+
+            return {
+                "check_success": False,
+                "is_duplicate": False,
+                "status_code": response.status_code,
+                "request_url": response.url,
+                "error_code": "ERR_005",
+                "error_description": f"Duplicate check failed. HTTP {response.status_code}. Response: {response_body}",
+                "response_body": response_body
+            }
+
+        except Timeout:
+            return {
+                "check_success": False,
+                "is_duplicate": False,
+                "status_code": "TIMEOUT",
+                "request_url": self.create_user_url,
+                "error_code": "ERR_005",
+                "error_description": "Duplicate check request timed out",
+                "response_body": None
+            }
+
+        except RequestException as exception:
+            return {
+                "check_success": False,
+                "is_duplicate": False,
+                "status_code": "REQUEST_ERROR",
+                "request_url": self.create_user_url,
+                "error_code": "ERR_005",
+                "error_description": f"Duplicate check request failed: {str(exception)}",
+                "response_body": None
+            }

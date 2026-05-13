@@ -119,3 +119,21 @@ class ConfigLoader:
             )
         }
     
+    def get_duplicate_check_config(self):
+        return {
+            "enabled": self.config.getboolean(
+                "DUPLICATE_CHECK",
+                "ENABLED",
+                fallback=True
+            ),
+            "attribute": self.config["DUPLICATE_CHECK"].get(
+                "ATTRIBUTE",
+                "CombankDetails.unifiedUsername"
+            ),
+            "use_quotes": self.config.getboolean(
+                "DUPLICATE_CHECK",
+                "USE_QUOTES",
+                fallback=True
+            )
+        }
+    

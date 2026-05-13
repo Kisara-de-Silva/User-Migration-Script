@@ -14,7 +14,8 @@ class UserCreator:
         false_values=None,
         scim_payload_config=None,
         auth_config=None,
-        http_config=None
+        http_config=None,
+        duplicate_check_config=None
     ):
         self.create_user_url = create_user_url
         self.delete_user_url = delete_user_url
@@ -25,6 +26,15 @@ class UserCreator:
         scim_payload_config = scim_payload_config or {}
         auth_config = auth_config or {}
         http_config = http_config or {}
+
+        duplicate_check_config = duplicate_check_config or {}
+
+        self.duplicate_check_enabled = duplicate_check_config.get("enabled", True)
+        self.duplicate_check_attribute = duplicate_check_config.get(
+            "attribute",
+            "CombankDetails.unifiedUsername"
+        )
+        self.duplicate_check_use_quotes = duplicate_check_config.get("use_quotes", True)
 
         self.scim_payload_builder = SCIMPayloadBuilder(
             true_values=true_values,
@@ -77,6 +87,17 @@ class UserCreator:
         loginid = output_user.get("loginid", "").strip()
 
         if self.mock_mode:
+            if "duplicate" in loginid.lower():
+                return {
+                    "success": False,
+                    "loginid": loginid,
+                    "payload": output_user,
+                    "api_payload": api_payload,
+                    "system_response_code": "MOCK_DUPLICATE",
+                    "error_code": "ERR_004",
+                    "error_description": "Duplicate Login ID: unifiedUsername already exists in target system"
+                }
+
             if "fail" in loginid.lower():
                 return {
                     "success": False,
@@ -96,6 +117,40 @@ class UserCreator:
                 "system_response_code": "MOCK_201",
                 "uuid": output_user["uuid"]
             }
+        
+        if self.duplicate_check_enabled:
+            duplicate_result = self.scim_client.check_duplicate_by_unified_username(
+                loginid=loginid,
+                attribute_name=self.duplicate_check_attribute,
+                use_quotes=self.duplicate_check_use_quotes
+            )
+
+            if not duplicate_result["check_success"]:
+                return {
+                    "success": False,
+                    "loginid": loginid,
+                    "payload": output_user,
+                    "api_payload": api_payload,
+                    "system_response_code": f"HTTP_{duplicate_result['status_code']}",
+                    "error_code": duplicate_result["error_code"],
+                    "error_description": duplicate_result["error_description"],
+                    "scim_response": duplicate_result.get("response_body")
+                }
+
+            if duplicate_result["is_duplicate"]:
+                return {
+                    "success": False,
+                    "loginid": loginid,
+                    "payload": output_user,
+                    "api_payload": api_payload,
+                    "system_response_code": f"HTTP_{duplicate_result['status_code']}",
+                    "error_code": "ERR_004",
+                    "error_description": (
+                        "Duplicate Login ID: input loginid already exists as "
+                        "CombankDetails.unifiedUsername in target system"
+                    ),
+                    "scim_response": duplicate_result.get("response_body")
+                }
 
         scim_result = self.scim_client.create_user(api_payload)
 
