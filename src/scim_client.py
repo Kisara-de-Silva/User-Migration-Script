@@ -230,3 +230,109 @@ class SCIMClient:
                 "error_description": f"Duplicate check request failed: {str(exception)}",
                 "response_body": None
             }
+        
+    def update_account_status(self, user_uuid, account_status, account_status_path="CombankDetails:accountStatus"):
+        encoded_uuid = self.encode_uuid_for_delete(user_uuid)
+        update_url = f"{self.delete_user_url}/{encoded_uuid}"
+
+        patch_payload = {
+            "schemas": [
+                "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+            ],
+            "Operations": [
+                {
+                    "op": "replace",
+                    "path": account_status_path,
+                    "value": account_status
+                }
+            ]
+        }
+
+        try:
+            response = requests.patch(
+                update_url,
+                json=patch_payload,
+                headers=self.get_headers(),
+                auth=self.get_auth(),
+                timeout=self.timeout_seconds,
+                verify=self.verify_ssl
+            )
+
+            response_body = self.parse_response_body(response)
+
+            if 200 <= response.status_code < 300:
+                return {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "update_url": update_url,
+                    "patch_payload": patch_payload,
+                    "response_body": response_body
+                }
+
+            if response.status_code == 404:
+                return {
+                    "success": False,
+                    "status_code": response.status_code,
+                    "update_url": update_url,
+                    "patch_payload": patch_payload,
+                    "error_code": "ERR_008",
+                    "error_description": "User Not Found: The provided uuid does not exist in the target system",
+                    "response_body": response_body
+                }
+
+            response_text = str(response_body).lower()
+
+            if (
+                "not found" in response_text
+                or "does not exist" in response_text
+                or (
+                    "rgyuser" in response_text
+                    and "null" in response_text
+                )
+                or (
+                    "getoneattributevalue" in response_text
+                    and "parameter2" in response_text
+                    and "null" in response_text
+                )
+            ):
+                return {
+                    "success": False,
+                    "status_code": response.status_code,
+                    "update_url": update_url,
+                    "patch_payload": patch_payload,
+                    "error_code": "ERR_008",
+                    "error_description": "User Not Found: The provided uuid does not exist in the target system",
+                    "response_body": response_body
+                }
+
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "update_url": update_url,
+                "patch_payload": patch_payload,
+                "error_code": "ERR_005",
+                "error_description": f"SCIM status update failed. HTTP {response.status_code}. Response: {response_body}",
+                "response_body": response_body
+            }
+
+        except Timeout:
+            return {
+                "success": False,
+                "status_code": "TIMEOUT",
+                "update_url": update_url,
+                "patch_payload": patch_payload,
+                "error_code": "ERR_005",
+                "error_description": "SCIM status update request timed out",
+                "response_body": None
+            }
+
+        except RequestException as exception:
+            return {
+                "success": False,
+                "status_code": "REQUEST_ERROR",
+                "update_url": update_url,
+                "patch_payload": patch_payload,
+                "error_code": "ERR_005",
+                "error_description": f"SCIM status update request failed: {str(exception)}",
+                "response_body": None
+            }

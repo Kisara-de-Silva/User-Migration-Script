@@ -20,6 +20,10 @@ class ConfigLoader:
             "destination_dir": self.config["PATHS"]["DESTINATION_DIR"],
             "log_dir": self.config["PATHS"]["LOG_DIR"],
             "tracker_file": self.config["PATHS"]["TRACKER_FILE"],
+            "status_update_tracker_file": self.config["PATHS"].get(
+                "STATUS_UPDATE_TRACKER_FILE",
+                "./status_update_tracker.csv"
+            ),
         }
 
     def get_target_config(self):
@@ -134,6 +138,32 @@ class ConfigLoader:
                 "DUPLICATE_CHECK",
                 "USE_QUOTES",
                 fallback=True
+            )
+        }
+    
+    def get_status_update_config(self):
+        allowed_values = self.config["STATUS_UPDATE"].get(
+            "ALLOWED_STATUS_VALUES",
+            "UC,ACT,LCK,ALK,DBLT,DBLP"
+        )
+
+        return {
+            "status_update_prefix": self.config["STATUS_UPDATE"].get(
+                "STATUS_UPDATE_PREFIX",
+                "User_Status_Update_"
+            ),
+            "status_update_extension": self.config["STATUS_UPDATE"].get(
+                "STATUS_UPDATE_EXTENSION",
+                ".csv"
+            ),
+            "allowed_status_values": [
+                value.strip().upper()
+                for value in allowed_values.split(",")
+                if value.strip()
+            ],
+            "patch_account_status_path": self.config["STATUS_UPDATE"].get(
+                "PATCH_ACCOUNT_STATUS_PATH",
+                "CombankDetails:accountStatus"
             )
         }
     
