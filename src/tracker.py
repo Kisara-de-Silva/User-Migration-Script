@@ -57,6 +57,7 @@ class MigrationTracker:
         completed_at=None
     ):
         self.ensure_tracker_exists()
+        self.ensure_file_ends_with_newline()
 
         if completed_at is None:
             completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -74,3 +75,17 @@ class MigrationTracker:
         with open(self.tracker_file, mode="a", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=self.fieldnames)
             writer.writerow(new_row)
+
+    def ensure_file_ends_with_newline(self):
+        if not os.path.exists(self.tracker_file):
+            return
+
+        if os.path.getsize(self.tracker_file) == 0:
+            return
+
+        with open(self.tracker_file, "rb+") as file:
+            file.seek(-1, os.SEEK_END)
+            last_character = file.read(1)
+
+            if last_character not in [b"\n", b"\r"]:
+                file.write(b"\n")

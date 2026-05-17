@@ -70,14 +70,14 @@ class UserValidator:
 
         return None
 
-    def is_valid_mmddyyyy_date(self, value):
+    def is_valid_yyyy_mm_dd_date(self, value):
         value = str(value).strip()
 
         if not value:
             return True
 
         try:
-            datetime.strptime(value, "%m/%d/%Y")
+            datetime.strptime(value, "%Y-%m-%d")
             return True
         except ValueError:
             return False
@@ -203,10 +203,10 @@ class UserValidator:
         for field in self.DATE_FIELDS:
             value = user.get(field, "")
 
-            if value and not self.is_valid_mmddyyyy_date(value):
+            if value and not self.is_valid_yyyy_mm_dd_date(value):
                 errors.append({
                     "code": "ERR_006",
-                    "description": f"Invalid date format for {field}: expected MM/DD/YYYY"
+                    "description": f"Invalid date format for {field}: expected YYYY-MM-DD"
                 })
 
         # ERR_001 - Numeric attempt fields

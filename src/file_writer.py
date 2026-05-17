@@ -90,7 +90,10 @@ class FileWriter:
 
             output_row = {}
             for header in output_headers:
-                output_row[header] = cleaned_user.get(header, "")
+                if header == "uuid":
+                    output_row[header] = ""
+                else:
+                    output_row[header] = cleaned_user.get(header, "")
 
             cleaned_users.append(output_row)
 

@@ -45,7 +45,7 @@ class SCIMPayloadBuilder:
 
         return int(value)
 
-    def convert_mmddyyyy_to_isds_datetime(self, user, field_name):
+    def convert_yyyy_mm_dd_to_isds_datetime(self, user, field_name):
         value = self.get_value(user, field_name)
 
         if not value:
@@ -56,7 +56,7 @@ class SCIMPayloadBuilder:
         if len(value) == 15 and value.endswith("Z") and value[:14].isdigit():
             return value
 
-        parsed_date = datetime.strptime(value, "%m/%d/%Y")
+        parsed_date = datetime.strptime(value, "%Y-%m-%d")
 
         # BU input gives only date, so we use 000000 for time.
         return parsed_date.strftime("%Y%m%d000000Z")
@@ -67,9 +67,9 @@ class SCIMPayloadBuilder:
 
         user_uuid = self.get_value(user, "uuid")
 
-        effective_from_isds = self.convert_mmddyyyy_to_isds_datetime(user, "effectivefrom")
-        modified_on_isds = self.convert_mmddyyyy_to_isds_datetime(user, "modifiedon")
-        last_password_change_on_isds = self.convert_mmddyyyy_to_isds_datetime(
+        effective_from_isds = self.convert_yyyy_mm_dd_to_isds_datetime(user, "effectivefrom")
+        modified_on_isds = self.convert_yyyy_mm_dd_to_isds_datetime(user, "modifiedon")
+        last_password_change_on_isds = self.convert_yyyy_mm_dd_to_isds_datetime(
             user,
             "lastPasswordChangeOn"
         )
