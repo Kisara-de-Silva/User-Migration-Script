@@ -123,14 +123,14 @@ class UserValidator:
                 })
 
         # ERR_001 - telno format
-        telno = user.get("telno", "")
+        # telno = user.get("telno", "")
 
-        if telno is not None and str(telno).strip():
-            if not str(telno).strip().startswith("+"):
-                errors.append({
-                    "code": "ERR_001",
-                    "description": "Invalid value for telno: phone number must start with +"
-                })
+        #if telno is not None and str(telno).strip():
+            #if not str(telno).strip().startswith("+"):
+                #errors.append({
+                    #"code": "ERR_001",
+                    #"description": "Invalid value for telno: phone number must start with +"
+               # })
 
         # ERR_001 - email format
         emailid = user.get("emailid", "")

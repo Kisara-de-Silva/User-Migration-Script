@@ -36,6 +36,17 @@ class SCIMPayloadBuilder:
             return False
 
         raise ValueError(f"Invalid boolean value for field: {field_name}")
+    
+    def get_telno_for_isds(self, user):
+        telno = self.get_value(user, "telno")
+
+        if not telno:
+            return ""
+
+        if telno.startswith("+"):
+            return telno
+
+        return f"+{telno}"
 
     def to_integer(self, user, field_name, default_value=0):
         value = self.get_value(user, field_name)
@@ -103,7 +114,7 @@ class SCIMPayloadBuilder:
             "phoneNumbers": [
                 {
                     "type": "mobile",
-                    "value": self.get_value(user, "telno"),
+                    "value": self.get_telno_for_isds(user),
                     "primary": False
                 }
             ],
